@@ -43,17 +43,20 @@ A backend system that tracks transaction fees in USDT for Uniswap WETH-USDC tran
 ### Development Setup
 
 1. Clone the repository
+
 ```bash
 git clone <repository-url>
 cd uniswap-fee-tracker
 ```
 
 2. Run tests
+
 ```bash
 go test ./...
 ```
 
 3. Run with Docker Compose
+
 ```bash
 docker-compose up
 ```

@@ -17,7 +17,7 @@ services:
       - db
     volumes:
       - .:/app
-    command: ["go", "run", "cmd/main.go"]
+    command: [ "go", "run", "cmd/main.go" ]
 
   db:
     image: postgres:15-alpine
