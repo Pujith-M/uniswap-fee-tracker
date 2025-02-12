@@ -1,5 +1,12 @@
 package etherscan
 
+import (
+	"fmt"
+	"math/big"
+	"strconv"
+	"time"
+)
+
 // TokenTransfer represents a token transfer event from Etherscan
 type TokenTransfer struct {
 	BlockNumber       string `json:"blockNumber"`
@@ -21,6 +28,46 @@ type TokenTransfer struct {
 	CumulativeGasUsed string `json:"cumulativeGasUsed"`
 	Input             string `json:"input"`
 	Confirmations     string `json:"confirmations"`
+}
+
+// GetBlockNumber converts the BlockNumber field from string to uint64
+func (t TokenTransfer) GetBlockNumber() uint64 {
+	blockNumber, err := strconv.ParseUint(t.BlockNumber, 10, 64)
+	if err != nil {
+		fmt.Printf("Failed to parse BlockNumber '%s' to uint64: %v\n", t.BlockNumber, err)
+		return 0 // Return 0 on error
+	}
+	return blockNumber
+}
+
+// GetTimeStamp converts the TimeStamp field from string (Unix timestamp) to time.Time
+func (t TokenTransfer) GetTimeStamp() time.Time {
+	timestampInt, err := strconv.ParseInt(t.TimeStamp, 10, 64)
+	if err != nil {
+		fmt.Printf("Failed to parse TimeStamp '%s' to int64: %v\n", t.TimeStamp, err)
+		return time.Time{} // Return zero time on error
+	}
+	return time.Unix(timestampInt, 0) // Convert Unix timestamp to time.Time
+}
+
+// GetGasUsed converts the GasUsed field from string to uint64
+func (t TokenTransfer) GetGasUsed() *big.Int {
+	gasUsed, ok := big.NewInt(0).SetString(t.GasUsed, 10)
+	if !ok {
+		fmt.Printf("Error: Unable to parse 'GasUsed' field '%s' into *big.Int\n", t.GasUsed)
+		return nil // Return nil on error
+	}
+	return gasUsed
+}
+
+// GetGasUsed converts the GasUsed field from string to uint64
+func (t TokenTransfer) GetGasPrice() *big.Int {
+	gasPrice, ok := big.NewInt(0).SetString(t.GasPrice, 10)
+	if !ok {
+		fmt.Printf("Error: Unable to parse 'GasUsed' field '%s' into *big.Int\n", t.GasUsed)
+		return nil // Return nil on error
+	}
+	return gasPrice
 }
 
 // EtherscanResponse represents the response from Etherscan API
