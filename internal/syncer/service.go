@@ -2,27 +2,33 @@ package syncer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"time"
 	"uniswap-fee-tracker/internal/binance"
 	"uniswap-fee-tracker/internal/config"
+	"uniswap-fee-tracker/internal/ethereum"
 	"uniswap-fee-tracker/internal/etherscan"
+
+	"gorm.io/gorm"
 )
 
 type Service struct {
-	config    *config.Config
-	ethClient etherscan.Client
-	binClient binance.Client
-	repo      Repository
+	config     *config.Config
+	ethClient  etherscan.Client
+	binClient  binance.Client
+	repo       Repository
+	nodeClient *ethereum.Client
 }
 
-func NewService(config *config.Config, ethClient etherscan.Client, binClient binance.Client, repo Repository) *Service {
+func NewService(config *config.Config, ethClient etherscan.Client, binClient binance.Client, nodeClient *ethereum.Client, repo Repository) *Service {
 	return &Service{
-		config:    config,
-		ethClient: ethClient,
-		binClient: binClient,
-		repo:      repo,
+		config:     config,
+		ethClient:  ethClient,
+		binClient:  binClient,
+		nodeClient: nodeClient,
+		repo:       repo,
 	}
 }
 
@@ -30,18 +36,32 @@ func NewService(config *config.Config, ethClient etherscan.Client, binClient bin
 func (s *Service) StartHistoricalSync(ctx context.Context, startBlock, latestBlock uint64) error {
 	// Create sync progress record
 	progress := &SyncProgress{
-		StartBlock:         startBlock,
-		LastProcessedBlock: startBlock,
-		LatestBlock:        latestBlock,
-		Status:             SyncStatusRunning,
+		StartBlock:            startBlock,
+		EndBlock:              latestBlock,
+		LastProcessedBlock:    startBlock,
+		TransactionsProcessed: 0,
+		Status:                SyncStatusRunning,
+		ErrorMessage:          "",
+		CompletedAt:           nil,
 	}
 
 	if err := s.repo.CreateSyncProgress(progress); err != nil {
 		return fmt.Errorf("failed to create sync progress: %w", err)
 	}
-
+	err := s.repo.UpdateLastTrackedBlock(latestBlock)
+	if err != nil {
+		log.Printf("failed to update last tracked block: %v", err)
+		return err
+	}
 	// Start sync in a goroutine
-	go s.runHistoricalSync(ctx, progress)
+	syncProgress, err := s.repo.GetIncompleteSyncProgress()
+	if err != nil {
+		log.Printf("failed to get incomplete sync progress: %v", err)
+		return err
+	}
+	for _, sync := range syncProgress {
+		go s.runHistoricalSync(ctx, &sync)
+	}
 
 	return nil
 }
@@ -57,10 +77,10 @@ func (s *Service) runHistoricalSync(ctx context.Context, progress *SyncProgress)
 	}()
 
 	currentBlock := progress.StartBlock
-	for currentBlock <= progress.LatestBlock {
+	for currentBlock <= progress.EndBlock {
 		select {
 		case <-ctx.Done():
-			progress.Status = SyncStatusFailed
+			progress.Status = SyncStatusPaused
 			progress.ErrorMessage = "context cancelled"
 			s.repo.UpdateSyncProgress(progress)
 			return
@@ -68,7 +88,7 @@ func (s *Service) runHistoricalSync(ctx context.Context, progress *SyncProgress)
 		}
 
 		// Get transactions for current batch
-		transfers, err := s.ethClient.GetTokenTransfers(ctx, s.config.UniswapV3Pool, currentBlock, progress.LatestBlock)
+		transfers, err := s.ethClient.GetTokenTransfers(ctx, s.config.UniswapV3Pool, currentBlock, progress.EndBlock)
 		if err != nil {
 			log.Printf("Failed to get token transfers for block %d: %v", currentBlock, err)
 			time.Sleep(10 * time.Second)
@@ -79,8 +99,8 @@ func (s *Service) runHistoricalSync(ctx context.Context, progress *SyncProgress)
 			break
 		}
 		lastBlockInBatch := transfers[len(transfers)-1].GetBlockNumber()
-
-		txBatch := s.filterAndGroupTransactions(transfers, lastBlockInBatch)
+		isFinalIteration := lastBlockInBatch == progress.EndBlock
+		txBatch := s.filterAndGroupTransactions(transfers, isFinalIteration, lastBlockInBatch)
 
 		// Log batch processing
 		log.Printf("Fetching historic price for batch of %d transactions from block %d to %d",
@@ -110,6 +130,9 @@ func (s *Service) runHistoricalSync(ctx context.Context, progress *SyncProgress)
 
 		// Set next start block
 		currentBlock = lastBlockInBatch
+		if isFinalIteration {
+			break
+		}
 	}
 
 	// Mark sync as completed
@@ -117,7 +140,7 @@ func (s *Service) runHistoricalSync(ctx context.Context, progress *SyncProgress)
 	s.repo.UpdateSyncProgress(progress)
 }
 
-func (s *Service) filterAndGroupTransactions(transfers []etherscan.TokenTransfer, lastBlockInBatch uint64) [][]*Transaction {
+func (s *Service) filterAndGroupTransactions(transfers []etherscan.TokenTransfer, isFinalIteration bool, lastBlockInBatch uint64) [][]*Transaction {
 	// Process transfers in batches using a map to track transactions
 	txMap := make(map[string]*Transaction)
 
@@ -130,8 +153,8 @@ func (s *Service) filterAndGroupTransactions(transfers []etherscan.TokenTransfer
 		}
 		blockNum := transfer.GetBlockNumber()
 
-		// Skip transactions from the last block as they might be incomplete
-		if lastBlockInBatch == blockNum {
+		// Exclude transactions from the last block if it's not the final iteration to avoid processing incomplete data
+		if lastBlockInBatch == blockNum && !isFinalIteration {
 			continue
 		}
 
@@ -172,12 +195,49 @@ func (s *Service) filterAndGroupTransactions(transfers []etherscan.TokenTransfer
 	return txBatch
 }
 
-// GetSyncProgress returns the current sync progress
-func (s *Service) GetSyncProgress() (*SyncProgress, error) {
-	return s.repo.GetLatestSyncProgress()
-}
-
 // GetTransaction returns a transaction by its hash
 func (s *Service) GetTransaction(txHash string) (*Transaction, error) {
 	return s.repo.GetTransaction(txHash)
+}
+
+func (s *Service) StartSync(ctx context.Context, indexedStartBlock uint64) error {
+	// Get last tracked block
+	lastTrackedBlock, err := s.repo.GetLastTrackedBlock()
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// If no blocks tracked yet, start from configured start block
+			lastTrackedBlock = indexedStartBlock - 1
+		} else {
+			return fmt.Errorf("failed to get last tracked block: %w", err)
+		}
+	}
+
+	// Get latest block from node
+	latestBlockNumber, err := s.nodeClient.GetLatestBlockNumber(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get latest block number: %w", err)
+	}
+
+	// Validate block numbers
+	if lastTrackedBlock > latestBlockNumber {
+		return fmt.Errorf("last tracked block (%d) is greater than latest block (%d)",
+			lastTrackedBlock, latestBlockNumber)
+	}
+
+	// Start historical sync if we're behind
+	if lastTrackedBlock < latestBlockNumber {
+		log.Printf("Starting historical sync from block %d to %d", lastTrackedBlock, latestBlockNumber)
+		if err := s.StartHistoricalSync(ctx, lastTrackedBlock+1, latestBlockNumber); err != nil {
+			return fmt.Errorf("failed to start historical sync: %w", err)
+		}
+	}
+
+	// Start live sync from latest block
+	log.Printf("Starting live sync from block %d", latestBlockNumber)
+	return s.StartLiveSync(ctx, latestBlockNumber)
+}
+
+func (s *Service) StartLiveSync(ctx context.Context, number uint64) error {
+	//implement later
+	return nil
 }

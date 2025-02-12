@@ -16,6 +16,7 @@ import (
 	"uniswap-fee-tracker/api/handlers"
 	"uniswap-fee-tracker/internal/binance"
 	"uniswap-fee-tracker/internal/config"
+	"uniswap-fee-tracker/internal/ethereum"
 	"uniswap-fee-tracker/internal/etherscan"
 	"uniswap-fee-tracker/internal/syncer"
 )
@@ -49,6 +50,10 @@ func main() {
 	// Initialize clients and repository
 	ethClient := etherscan.NewClient(&cfg.EtherscanConfig)
 	binClient := binance.NewClient(&cfg.BinanceConfig)
+	nodeClient, err := ethereum.NewClient(cfg.EthereumConfig.NodeURL)
+	if err != nil {
+		log.Fatalf("Failed to connect to Ethereum node: %v", err)
+	}
 	repo := syncer.NewRepository(db)
 
 	// Auto migrate database schema
@@ -56,18 +61,15 @@ func main() {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
 
-	service := syncer.NewService(cfg, ethClient, binClient, repo)
+	service := syncer.NewService(cfg, ethClient, binClient, nodeClient, repo)
 
 	// Create context that can be cancelled
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// Start historical sync from Uniswap v3 deployment block
-	startBlock := uint64(12376729)  // Uniswap v3 deployment block
-	latestBlock := uint64(21824598) // You can adjust this or get it dynamically
-
-	log.Printf("Starting historical sync from block %d to %d", startBlock, latestBlock)
-	if err := service.StartHistoricalSync(ctx, startBlock, latestBlock); err != nil {
+	log.Printf("Starting historical sync from block %d", cfg.UniswapStartBlock)
+	if err := service.StartSync(ctx, cfg.UniswapStartBlock); err != nil {
 		log.Fatalf("Failed to start historical sync: %v", err)
 	}
 

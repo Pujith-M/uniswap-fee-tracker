@@ -10,8 +10,10 @@ type Config struct {
 	Port                string
 	DBUri               string
 	UniswapV3Pool       string
+	UniswapStartBlock   uint64
 	EtherscanConfig     EtherscanConfig
 	BinanceConfig       BinanceConfig
+	EthereumConfig      EthereumConfig
 	PriceFetchBatchSize int
 }
 
@@ -34,11 +36,20 @@ type BinanceConfig struct {
 	HTTPClientConfig
 }
 
+type EthereumConfig struct {
+	NodeURL string
+}
+
 func LoadConfig() (*Config, error) {
 	// Required environment variables
 	etherscanAPIKey := os.Getenv("ETHERSCAN_API_KEY")
 	if etherscanAPIKey == "" {
 		return nil, fmt.Errorf("ETHERSCAN_API_KEY environment variable is required")
+	}
+
+	ethNodeURL := os.Getenv("ETH_NODE_URL")
+	if ethNodeURL == "" {
+		return nil, fmt.Errorf("ETH_NODE_URL environment variable is required")
 	}
 
 	dbURI := os.Getenv("DB_URI")
@@ -47,9 +58,13 @@ func LoadConfig() (*Config, error) {
 	}
 
 	return &Config{
-		Port:          ":8080",
-		DBUri:         dbURI,
-		UniswapV3Pool: "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // Uniswap V3 USDC/WETH pool
+		Port:              ":8080",
+		DBUri:             dbURI,
+		UniswapV3Pool:     "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // Uniswap V3 USDC/WETH pool
+		UniswapStartBlock: 12376729,                                     // Uniswap V3 deployment block
+		EthereumConfig: EthereumConfig{
+			NodeURL: ethNodeURL,
+		},
 		EtherscanConfig: EtherscanConfig{
 			HTTPClientConfig: HTTPClientConfig{
 				BaseURL:    "https://api.etherscan.io/api",

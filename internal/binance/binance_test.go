@@ -1,18 +1,19 @@
-package binance_test
+package binance
 
 import (
 	"context"
+	"github.com/stretchr/testify/assert"
 	"math/big"
 	"testing"
 	"time"
-	"uniswap-fee-tracker/internal/binance"
-
-	"github.com/stretchr/testify/assert"
+	"uniswap-fee-tracker/internal/config"
 )
 
 func TestGetPrice(t *testing.T) {
+	cfg, err := config.LoadConfig()
+	assert.NoError(t, err, "Unexpected error occurred while loading config")
 	// Create a new Binance client
-	client := binance.NewClient()
+	client := NewClient(&cfg.BinanceConfig)
 
 	// Define test data
 	ctx := context.Background()

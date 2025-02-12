@@ -18,8 +18,8 @@ func TestTransaction_UpdatePrices(t *testing.T) {
 			name: "simple gas calculation",
 			tx: &Transaction{
 				TxHash:    "0x123",
-				GasUsed:   big.NewInt(21000),       // Standard ETH transfer gas
-				GasPrice:  big.NewInt(50000000000), // 50 Gwei
+				GasUsed:   NewBigInt(big.NewInt(21000)),       // Standard ETH transfer gas
+				GasPrice:  NewBigInt(big.NewInt(50000000000)), // 50 Gwei
 				Status:    StatusPendingPrice,
 				Timestamp: time.Now(),
 			},
@@ -31,8 +31,8 @@ func TestTransaction_UpdatePrices(t *testing.T) {
 			name: "complex gas calculation",
 			tx: &Transaction{
 				TxHash:    "0x456",
-				GasUsed:   big.NewInt(300000),       // Complex contract interaction
-				GasPrice:  big.NewInt(100000000000), // 100 Gwei
+				GasUsed:   NewBigInt(big.NewInt(300000)),       // Complex contract interaction
+				GasPrice:  NewBigInt(big.NewInt(100000000000)), // 100 Gwei
 				Status:    StatusPendingPrice,
 				Timestamp: time.Now(),
 			},
@@ -44,8 +44,8 @@ func TestTransaction_UpdatePrices(t *testing.T) {
 			name: "high gas price calculation",
 			tx: &Transaction{
 				TxHash:    "0x789",
-				GasUsed:   big.NewInt(21000),        // Standard ETH transfer gas
-				GasPrice:  big.NewInt(500000000000), // 500 Gwei (high gas price)
+				GasUsed:   NewBigInt(big.NewInt(21000)),        // Standard ETH transfer gas
+				GasPrice:  NewBigInt(big.NewInt(500000000000)), // 500 Gwei (high gas price)
 				Status:    StatusPendingPrice,
 				Timestamp: time.Now(),
 			},
@@ -97,8 +97,8 @@ func TestTransaction_UpdatePrices_ZeroValues(t *testing.T) {
 	// Test with zero gas values
 	tx := &Transaction{
 		TxHash:    "0x000",
-		GasUsed:   big.NewInt(0),
-		GasPrice:  big.NewInt(0),
+		GasUsed:   NewBigInt(big.NewInt(0)),
+		GasPrice:  NewBigInt(big.NewInt(0)),
 		Status:    StatusPendingPrice,
 		Timestamp: time.Now(),
 	}

@@ -1,12 +1,10 @@
-package etherscan_test
+package etherscan
 
 import (
 	"context"
+	"github.com/stretchr/testify/assert"
 	"testing"
 	"uniswap-fee-tracker/internal/config"
-	"uniswap-fee-tracker/internal/etherscan"
-
-	"github.com/stretchr/testify/assert"
 )
 
 func TestGetTokenTransfers(t *testing.T) {
@@ -15,7 +13,7 @@ func TestGetTokenTransfers(t *testing.T) {
 	assert.NoError(t, err, "should not return errors")
 
 	// Create a new Etherscan client
-	client := etherscan.NewClient(&testConfig.EtherscanConfig)
+	client := NewClient(&testConfig.EtherscanConfig)
 
 	// Define test parameters
 	address := testConfig.UniswapV3Pool

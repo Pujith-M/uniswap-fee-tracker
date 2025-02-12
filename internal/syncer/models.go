@@ -23,6 +23,7 @@ const (
 	SyncStatusRunning   SyncStatus = "RUNNING"
 	SyncStatusCompleted SyncStatus = "COMPLETED"
 	SyncStatusFailed    SyncStatus = "FAILED"
+	SyncStatusPaused    SyncStatus = "PAUSED"
 )
 
 // Transaction represents a processed Ethereum transaction with its fee in USDT
@@ -62,15 +63,22 @@ func (tx *Transaction) UpdatePrices(ethPrice *big.Float) {
 	tx.UpdatedAt = time.Now()
 }
 
-// SyncProgress tracks the progress of historical sync
+// SyncProgress tracks the progress of block synchronization
 type SyncProgress struct {
 	gorm.Model
-	StartBlock            uint64     `gorm:"not null" json:"start_block"`
+	StartBlock            uint64     `gorm:"not null;index" json:"start_block"`
+	EndBlock              uint64     `gorm:"not null;index" json:"end_block"`
 	LastProcessedBlock    uint64     `gorm:"not null" json:"last_processed_block"`
-	LatestBlock           uint64     `gorm:"not null" json:"latest_block"`
 	TransactionsProcessed uint64     `gorm:"not null" json:"transactions_processed"`
-	Status                SyncStatus `gorm:"type:varchar(20);not null" json:"status"`
+	Status                SyncStatus `gorm:"type:varchar(20);not null;index" json:"status"`
 	ErrorMessage          string     `json:"error_message,omitempty"`
+	CompletedAt           *time.Time `json:"completed_at,omitempty"`
+}
+
+// BlockTracker keeps track of the last processed block number
+type BlockTracker struct {
+	gorm.Model
+	BlockNumber uint64 `gorm:"not null" json:"block_number"`
 }
 
 // TableName specifies the table name for Transaction
@@ -81,4 +89,9 @@ func (Transaction) TableName() string {
 // TableName specifies the table name for SyncProgress
 func (SyncProgress) TableName() string {
 	return "sync_progress"
+}
+
+// TableName specifies the table name for BlockTracker
+func (BlockTracker) TableName() string {
+	return "block_tracker"
 }
