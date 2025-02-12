@@ -8,26 +8,17 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
+	"uniswap-fee-tracker/api"
+	"uniswap-fee-tracker/api/handlers"
 	"uniswap-fee-tracker/internal/binance"
 	"uniswap-fee-tracker/internal/config"
 	"uniswap-fee-tracker/internal/etherscan"
 	"uniswap-fee-tracker/internal/syncer"
 )
-
-func setupRouter() *gin.Engine {
-	r := gin.Default()
-
-	r.GET("/health", func(c *gin.Context) {
-		c.String(200, "Service is healthy")
-	})
-
-	return r
-}
 
 func main() {
 	// Load configuration
@@ -57,7 +48,7 @@ func main() {
 
 	// Initialize clients and repository
 	ethClient := etherscan.NewClient(&cfg.EtherscanConfig)
-	binClient := binance.NewClient()
+	binClient := binance.NewClient(&cfg.BinanceConfig)
 	repo := syncer.NewRepository(db)
 
 	// Auto migrate database schema
@@ -80,12 +71,14 @@ func main() {
 		log.Fatalf("Failed to start historical sync: %v", err)
 	}
 
-	// Start HTTP server
-	gin.SetMode(gin.ReleaseMode)
-	router := setupRouter()
+	txHandler := handlers.NewTransactionHandler(service)
+
+	// Create API server
 	go func() {
-		log.Println("Starting server on :8080")
-		if err := router.Run(":8080"); err != nil {
+		routes := api.NewServer(txHandler).RegisterRoutes()
+
+		log.Println("Starting server on ", cfg.Port)
+		if err := routes.Start(cfg.Port); err != nil {
 			log.Printf("HTTP server error: %v", err)
 		}
 	}()

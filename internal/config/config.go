@@ -7,6 +7,7 @@ import (
 )
 
 type Config struct {
+	Port                string
 	DBUri               string
 	UniswapV3Pool       string
 	EtherscanConfig     EtherscanConfig
@@ -46,6 +47,7 @@ func LoadConfig() (*Config, error) {
 	}
 
 	return &Config{
+		Port:          ":8080",
 		DBUri:         dbURI,
 		UniswapV3Pool: "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // Uniswap V3 USDC/WETH pool
 		EtherscanConfig: EtherscanConfig{

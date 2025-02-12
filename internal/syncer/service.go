@@ -147,8 +147,8 @@ func (s *Service) filterAndGroupTransactions(transfers []etherscan.TokenTransfer
 			TxHash:      transfer.Hash,
 			BlockNumber: blockNum,
 			Timestamp:   transfer.GetTimeStamp(),
-			GasUsed:     gasUsed,
-			GasPrice:    gasPrice,
+			GasUsed:     NewBigInt(gasUsed),
+			GasPrice:    NewBigInt(gasPrice),
 			Status:      StatusPendingPrice,
 		}
 

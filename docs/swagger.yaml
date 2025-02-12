@@ -1,0 +1,104 @@
+definitions:
+  models.ErrorResponse:
+    description: Error response when the API request fails
+    properties:
+      error:
+        description: |-
+          Error message
+          @Description Description of what went wrong
+        type: string
+    type: object
+  models.TransactionResponse:
+    description: Response containing transaction details including gas fees
+    properties:
+      block_number:
+        description: |-
+          Block number
+          @Description The block number in which this transaction was included
+        type: integer
+      eth_price:
+        description: |-
+          ETH price in USDT
+          @Description ETH/USDT price at transaction time
+        type: string
+      fee_eth:
+        description: |-
+          Fee in ETH
+          @Description Transaction fee in ETH
+        type: string
+      fee_usdt:
+        description: |-
+          Fee in USDT
+          @Description Transaction fee converted to USDT
+        type: string
+      gas_price:
+        description: |-
+          Gas price
+          @Description Price per unit of gas in Wei
+        type: string
+      gas_used:
+        description: |-
+          Gas used
+          @Description Amount of gas used by this transaction
+        type: string
+      status:
+        allOf:
+        - $ref: '#/definitions/syncer.TransactionStatus'
+        description: |-
+          Transaction status
+          @Description Current processing status of the transaction
+      timestamp:
+        description: |-
+          Transaction timestamp
+          @Description When this transaction was processed
+        type: string
+      tx_hash:
+        description: |-
+          Transaction hash
+          @Description Unique identifier of the transaction
+        type: string
+    type: object
+  syncer.TransactionStatus:
+    enum:
+    - PROCESSED
+    - PENDING_PRICE
+    - FAILED
+    type: string
+    x-enum-varnames:
+    - StatusProcessed
+    - StatusPendingPrice
+    - StatusFailed
+info:
+  contact: {}
+paths:
+  /api/v1/transactions/{txHash}:
+    get:
+      consumes:
+      - application/json
+      description: Get the transaction fee in USDT for a specific Uniswap WETH-USDC
+        transaction
+      parameters:
+      - description: Transaction Hash
+        in: path
+        name: txHash
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.TransactionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Get transaction fee in USDT
+      tags:
+      - transactions
+swagger: "2.0"

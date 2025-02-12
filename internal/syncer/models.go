@@ -30,11 +30,11 @@ type Transaction struct {
 	TxHash      string            `gorm:"primaryKey;type:varchar(66)" json:"tx_hash"`
 	BlockNumber uint64            `gorm:"index" json:"block_number"`
 	Timestamp   time.Time         `gorm:"index" json:"timestamp"`
-	GasUsed     *big.Int          `gorm:"type:numeric" json:"gas_used"`
-	GasPrice    *big.Int          `gorm:"type:numeric" json:"gas_price"` // Stored as string for big.Int
-	FeeETH      *big.Float        `gorm:"type:numeric" json:"fee_eth"`   // Stored as string for big.Float
-	FeeUSDT     *big.Float        `gorm:"type:numeric" json:"fee_usdt"`  // Stored as string for big.Float
-	ETHPrice    *big.Float        `gorm:"type:numeric" json:"eth_price"` // ETH price in USDT at transaction time
+	GasUsed     *BigInt           `gorm:"type:numeric(78,0)" json:"gas_used"`  // Custom type
+	GasPrice    *BigInt           `gorm:"type:numeric(78,0)" json:"gas_price"` // Custom type
+	FeeETH      *BigFloat         `gorm:"type:numeric(38,18)" json:"fee_eth"`  // Custom type
+	FeeUSDT     *BigFloat         `gorm:"type:numeric(38,6)" json:"fee_usdt"`  // Custom type
+	ETHPrice    *BigFloat         `gorm:"type:numeric(38,6)" json:"eth_price"` // Custom type
 	Status      TransactionStatus `gorm:"type:varchar(20)" json:"status"`
 	CreatedAt   time.Time         `json:"created_at"`
 	UpdatedAt   time.Time         `json:"updated_at"`
@@ -43,20 +43,19 @@ type Transaction struct {
 // UpdatePrices calculates transaction fees based on ETH price
 func (tx *Transaction) UpdatePrices(ethPrice *big.Float) {
 	// Calculate fee in Wei (gas_used * gas_price)
-	feeWei := new(big.Int).Mul(tx.GasUsed, tx.GasPrice)
+	feeWei := new(big.Int).Mul(tx.GasUsed.Int, tx.GasPrice.Int)
 
 	// Convert Wei to ETH (divide by 10^18)
 	denominator := new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil)
-	tx.FeeETH = new(big.Float).Quo(
+	tx.FeeETH = NewBigFloat(new(big.Float).Quo(
 		new(big.Float).SetInt(feeWei),
 		new(big.Float).SetInt(denominator),
-	)
-
+	))
 	// Store ETH price
-	tx.ETHPrice = new(big.Float).Set(ethPrice)
+	tx.ETHPrice = NewBigFloat(new(big.Float).Set(ethPrice))
 
 	// Calculate fee in USDT
-	tx.FeeUSDT = new(big.Float).Mul(tx.FeeETH, ethPrice)
+	tx.FeeUSDT = NewBigFloat(new(big.Float).Mul(tx.FeeETH.Float, ethPrice))
 
 	// Update status
 	tx.Status = StatusProcessed
