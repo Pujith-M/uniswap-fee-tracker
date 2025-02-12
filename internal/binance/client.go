@@ -5,14 +5,11 @@ import (
 	"fmt"
 	"strconv"
 	"time"
+	"uniswap-fee-tracker/internal/config"
 	"uniswap-fee-tracker/internal/utils"
 
 	"github.com/go-resty/resty/v2"
 	"golang.org/x/time/rate"
-)
-
-const (
-	baseURL = "https://api.binance.com/api/v3"
 )
 
 // Client defines methods for interacting with Binance API
@@ -21,24 +18,24 @@ type Client interface {
 }
 
 type client struct {
+	cfg        *config.BinanceConfig
 	httpClient *resty.Client
 	limiter    *rate.Limiter
 }
 
 // NewClient creates a new Binance API client
-func NewClient() Client {
+func NewClient(cfg *config.BinanceConfig) Client {
 	httpClient := resty.New().
-		SetBaseURL(baseURL).
-		SetTimeout(10 * time.Second).
-		SetRetryCount(2).
-		SetRetryWaitTime(1 * time.Second)
+		SetBaseURL(cfg.HTTPClientConfig.BaseURL).
+		SetTimeout(cfg.HTTPClientConfig.Timeout).
+		SetRetryCount(cfg.HTTPClientConfig.RetryCount).
+		SetRetryWaitTime(cfg.HTTPClientConfig.RetryWait)
 
-	// Binance has a limit of 1200 requests per minute
-	// Setting it to 1000 to be safe
-	binanceAllowedRequestsPerMinute := 1200
-	limiter := rate.NewLimiter(rate.Limit(binanceAllowedRequestsPerMinute/60.0), binanceAllowedRequestsPerMinute)
+	// Create rate limiter using configured limit and burst
+	limiter := rate.NewLimiter(rate.Limit(cfg.HTTPClientConfig.RateLimit), cfg.HTTPClientConfig.RateBurst)
 
 	return &client{
+		cfg:        cfg,
 		httpClient: httpClient,
 		limiter:    limiter,
 	}

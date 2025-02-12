@@ -10,16 +10,27 @@ type Config struct {
 	DBUri               string
 	UniswapV3Pool       string
 	EtherscanConfig     EtherscanConfig
+	BinanceConfig       BinanceConfig
 	PriceFetchBatchSize int
 }
 
+// HTTPClientConfig contains common configuration for HTTP clients with rate limiting
+type HTTPClientConfig struct {
+	BaseURL    string
+	RetryCount int
+	RetryWait  time.Duration
+	RateLimit  float64       // Rate limit per second
+	RateBurst  int           // Maximum burst size
+	Timeout    time.Duration // HTTP client timeout
+}
+
 type EtherscanConfig struct {
-	BaseURL     string
-	APIKey      string
-	RetryCount  int
-	RetryWait   time.Duration
-	MaxRequests int           // Rate limit: max requests per minute
-	Timeout     time.Duration // HTTP client timeout
+	HTTPClientConfig
+	APIKey string
+}
+
+type BinanceConfig struct {
+	HTTPClientConfig
 }
 
 func LoadConfig() (*Config, error) {
@@ -38,12 +49,25 @@ func LoadConfig() (*Config, error) {
 		DBUri:         dbURI,
 		UniswapV3Pool: "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // Uniswap V3 USDC/WETH pool
 		EtherscanConfig: EtherscanConfig{
-			BaseURL:     "https://api.etherscan.io/api",
-			APIKey:      etherscanAPIKey,
-			RetryCount:  3,
-			RetryWait:   time.Second,
-			MaxRequests: 5, // Etherscan free tier limit
-			Timeout:     10 * time.Second,
+			HTTPClientConfig: HTTPClientConfig{
+				BaseURL:    "https://api.etherscan.io/api",
+				RetryCount: 3,
+				RetryWait:  time.Second,
+				RateLimit:  5.0, // Etherscan limit: 5 calls per second
+				RateBurst:  5,   // Allow burst of 5 requests
+				Timeout:    10 * time.Second,
+			},
+			APIKey: etherscanAPIKey,
+		},
+		BinanceConfig: BinanceConfig{
+			HTTPClientConfig: HTTPClientConfig{
+				BaseURL:    "https://api.binance.com/api/v3",
+				RetryCount: 3,
+				RetryWait:  time.Second,
+				RateLimit:  20.0, // Binance limit: 1200 requests per minute = 20 per second
+				RateBurst:  50,   // Allow larger bursts for Binance
+				Timeout:    10 * time.Second,
+			},
 		},
 		PriceFetchBatchSize: 100,
 	}, nil
