@@ -41,30 +41,6 @@ func TestClientIntegration(t *testing.T) {
 		t.Logf("Latest block number: %d", blockNumber)
 	})
 
-	t.Run("GetBlockTimestamp", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-
-		// Get latest block number first
-		blockNumber, err := client.GetLatestBlockNumber(ctx)
-		if err != nil {
-			t.Fatalf("Failed to get latest block number: %v", err)
-		}
-
-		// Get timestamp for that block
-		timestamp, err := client.GetBlockTimestamp(ctx, blockNumber)
-		if err != nil {
-			t.Fatalf("Failed to get block timestamp: %v", err)
-		}
-
-		// Block timestamp should be recent (within last hour)
-		if time.Since(timestamp) > time.Hour {
-			t.Errorf("Block timestamp too old: %v", timestamp)
-		}
-
-		t.Logf("Block %d timestamp: %v", blockNumber, timestamp)
-	})
-
 	t.Run("Reconnection", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()

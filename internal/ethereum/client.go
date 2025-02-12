@@ -3,7 +3,6 @@ package ethereum
 import (
 	"context"
 	"fmt"
-	"math/big"
 	"sync"
 	"time"
 
@@ -51,27 +50,6 @@ func (c *Client) GetLatestBlockNumber(ctx context.Context) (uint64, error) {
 	}
 
 	return blockNumber, nil
-}
-
-// GetBlockTimestamp returns the timestamp of a specific block
-func (c *Client) GetBlockTimestamp(ctx context.Context, blockNumber uint64) (time.Time, error) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	block, err := c.client.BlockByNumber(ctx, big.NewInt(int64(blockNumber)))
-	if err != nil {
-		// Try to reconnect if the connection is lost
-		if err := c.reconnect(); err != nil {
-			return time.Time{}, fmt.Errorf("failed to get block and reconnect: %w", err)
-		}
-		// Retry once after reconnecting
-		block, err = c.client.BlockByNumber(ctx, big.NewInt(int64(blockNumber)))
-		if err != nil {
-			return time.Time{}, fmt.Errorf("failed to get block after reconnect: %w", err)
-		}
-	}
-
-	return time.Unix(int64(block.Time()), 0), nil
 }
 
 // reconnect attempts to reconnect to the Ethereum node
