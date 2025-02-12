@@ -65,16 +65,7 @@ func main() {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
 
-	// Initialize syncer service
-	syncerConfig := &syncer.Config{
-		PoolAddress:        cfg.UniswapV3Pool,
-		BatchSize:          100,
-		MaxRetries:         3,
-		RetryDelay:         time.Second * 5,
-		PriceUpdateWorkers: 5,
-	}
-
-	service := syncer.NewService(syncerConfig, ethClient, binClient, repo)
+	service := syncer.NewService(cfg, ethClient, binClient, repo)
 
 	// Create context that can be cancelled
 	ctx, cancel := context.WithCancel(context.Background())

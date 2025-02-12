@@ -7,9 +7,10 @@ import (
 )
 
 type Config struct {
-	DBUri           string
-	UniswapV3Pool   string
-	EtherscanConfig EtherscanConfig
+	DBUri               string
+	UniswapV3Pool       string
+	EtherscanConfig     EtherscanConfig
+	PriceFetchBatchSize int
 }
 
 type EtherscanConfig struct {
@@ -44,5 +45,6 @@ func LoadConfig() (*Config, error) {
 			MaxRequests: 5, // Etherscan free tier limit
 			Timeout:     10 * time.Second,
 		},
+		PriceFetchBatchSize: 100,
 	}, nil
 }

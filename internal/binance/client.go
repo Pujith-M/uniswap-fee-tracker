@@ -3,10 +3,12 @@ package binance
 import (
 	"context"
 	"fmt"
-	"github.com/go-resty/resty/v2"
 	"strconv"
 	"time"
 	"uniswap-fee-tracker/internal/utils"
+
+	"github.com/go-resty/resty/v2"
+	"golang.org/x/time/rate"
 )
 
 const (
@@ -20,6 +22,7 @@ type Client interface {
 
 type client struct {
 	httpClient *resty.Client
+	limiter    *rate.Limiter
 }
 
 // NewClient creates a new Binance API client
@@ -30,13 +33,24 @@ func NewClient() Client {
 		SetRetryCount(2).
 		SetRetryWaitTime(1 * time.Second)
 
+	// Binance has a limit of 1200 requests per minute
+	// Setting it to 1000 to be safe
+	binanceAllowedRequestsPerMinute := 1200
+	limiter := rate.NewLimiter(rate.Limit(binanceAllowedRequestsPerMinute/60.0), binanceAllowedRequestsPerMinute)
+
 	return &client{
 		httpClient: httpClient,
+		limiter:    limiter,
 	}
 }
 
 // GetPrice fetches the price data for a given symbol at a specific timestamp
 func (c *client) GetPrice(ctx context.Context, symbol string, timestamp time.Time) (*KlineData, error) {
+	// Wait for rate limiter
+	if err := c.limiter.Wait(ctx); err != nil {
+		return nil, fmt.Errorf("rate limiter wait: %w", err)
+	}
+
 	var klines [][]interface{}
 
 	resp, err := c.httpClient.R().
