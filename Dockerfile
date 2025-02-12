@@ -1,33 +1,14 @@
-# Build stage
-FROM golang:1.21-alpine AS builder
-
-WORKDIR /app
-
-# Install git and build dependencies
-RUN apk add --no-cache git
-
-# Copy go mod files
+FROM golang:1.22-alpine AS builder
+RUN apk add --update build-base git
+WORKDIR /src
 COPY go.mod go.sum ./
-
-# Download dependencies
 RUN go mod download
-
-# Copy source code
 COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -o app cmd/main.go
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -o main cmd/main.go
-
-# Final stage
 FROM alpine:latest
-
+RUN apk add --no-cache ca-certificates
 WORKDIR /app
-
-# Copy the binary from builder
-COPY --from=builder /app/main .
-
-# Expose port
+COPY --from=builder /src/app .
 EXPOSE 8080
-
-# Run the binary
-CMD ["./main"]
+CMD ["/app/app"]

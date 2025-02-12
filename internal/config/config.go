@@ -22,13 +22,19 @@ type EtherscanConfig struct {
 }
 
 func LoadConfig() (*Config, error) {
+	// Required environment variables
 	etherscanAPIKey := os.Getenv("ETHERSCAN_API_KEY")
 	if etherscanAPIKey == "" {
 		return nil, fmt.Errorf("ETHERSCAN_API_KEY environment variable is required")
 	}
 
+	dbURI := os.Getenv("DB_URI")
+	if dbURI == "" {
+		return nil, fmt.Errorf("DB_URI environment variable is required")
+	}
+
 	return &Config{
-		DBUri:         "postgresql://pujithm@127.0.0.1/uniswap-fee-tracker",
+		DBUri:         dbURI,
 		UniswapV3Pool: "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // Uniswap V3 USDC/WETH pool
 		EtherscanConfig: EtherscanConfig{
 			BaseURL:     "https://api.etherscan.io/api",

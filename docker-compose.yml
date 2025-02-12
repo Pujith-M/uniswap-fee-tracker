@@ -5,30 +5,54 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        - APP_NAME=uniswap-fee-tracker
+    container_name: uniswap-fee-tracker
     ports:
       - "8080:8080"
     environment:
-      - DB_HOST=db
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres
-      - DB_NAME=uniswap_fee_tracker
-      - DB_PORT=5432
+      - ETHERSCAN_API_KEY=ZENXIVWGUS7MTH3WWRMAYUK9HIPYZRUNUF
+      - DB_URI=postgresql://pujithm:postgres@db:5432/uniswap-fee-tracker
     depends_on:
-      - db
-    volumes:
-      - .:/app
-    command: [ "go", "run", "cmd/main.go" ]
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   db:
     image: postgres:15-alpine
+    container_name: uniswap-fee-tracker-db
     environment:
-      - POSTGRES_USER=postgres
+      - POSTGRES_USER=pujithm
       - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=uniswap_fee_tracker
+      - POSTGRES_DB=uniswap-fee-tracker
+      # Add some Postgres optimizations
+      - PGDATA=/var/lib/postgresql/data/pgdata
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data/pgdata
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pujithm -d uniswap-fee-tracker"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    command: [
+      "postgres",
+      "-c", "max_connections=100",
+      "-c", "shared_buffers=256MB",
+      "-c", "work_mem=64MB",
+      "-c", "maintenance_work_mem=256MB",
+      "-c", "effective_cache_size=1GB"
+    ]
 
 volumes:
   postgres_data:
+    name: uniswap-fee-tracker-data
