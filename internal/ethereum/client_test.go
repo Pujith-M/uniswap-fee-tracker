@@ -5,6 +5,9 @@ import (
 	"os"
 	"testing"
 	"time"
+	"uniswap-fee-tracker/internal/config"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestClientIntegration(t *testing.T) {
@@ -12,6 +15,8 @@ func TestClientIntegration(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
+	cfg, err2 := config.LoadConfig()
+	assert.NoError(t, err2, "Unexpected error occurred while loading config")
 	// Get node URL from environment variable
 	nodeURL := os.Getenv("INFURA_API_KEY")
 	if nodeURL == "" {
@@ -19,7 +24,7 @@ func TestClientIntegration(t *testing.T) {
 	}
 
 	// Create client
-	client, err := NewClient(nodeURL)
+	client, err := NewClient(&cfg.EthereumConfig)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
@@ -41,45 +46,69 @@ func TestClientIntegration(t *testing.T) {
 		t.Logf("Latest block number: %d", blockNumber)
 	})
 
-	t.Run("Reconnection", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Run("GetBlockByNumber", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		// Get block number to ensure initial connection works
-		_, err := client.GetLatestBlockNumber(ctx)
+		blockNumber := uint64(1) // Example block number
+		block, err := client.GetBlockByNumber(ctx, blockNumber)
 		if err != nil {
-			t.Fatalf("Failed to get initial block number: %v", err)
+			t.Fatalf("Failed to get block by number: %v", err)
 		}
 
-		// Force a reconnection
-		if err := client.reconnect(); err != nil {
-			t.Fatalf("Failed to reconnect: %v", err)
+		if block == nil {
+			t.Error("Expected block, got nil")
 		}
 
-		// Verify we can still get block number after reconnection
-		blockNumber, err := client.GetLatestBlockNumber(ctx)
-		if err != nil {
-			t.Fatalf("Failed to get block number after reconnect: %v", err)
-		}
-
-		if blockNumber == 0 {
-			t.Error("Got block number 0 after reconnect, expected non-zero block number")
-		}
+		// Add more assertions based on block contents if needed
 	})
-}
 
-func TestClientUnit(t *testing.T) {
-	t.Run("InvalidURL", func(t *testing.T) {
-		_, err := NewClient("invalid-url")
-		if err == nil {
-			t.Error("Expected error for invalid URL, got nil")
+	t.Run("GetBlockReceipts", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		blockNumber := uint64(21837889) // Example block number
+		receipts, err := client.GetBlockReceipts(ctx, blockNumber)
+		if err != nil {
+			t.Fatalf("Failed to get block receipts: %v", err)
+		}
+
+		if len(receipts) == 0 {
+			t.Error("Expected receipts, got empty slice")
 		}
 	})
 
-	t.Run("EmptyURL", func(t *testing.T) {
-		_, err := NewClient("")
+	t.Run("GetBlockReceipts_NonExistentBlock", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		blockNumber := uint64(99999999) // Non-existent block number
+		receipts, err := client.GetBlockReceipts(ctx, blockNumber)
+		if err != nil {
+			t.Fatalf("Failed to get block receipts: %v", err)
+		}
+
+		if len(receipts) != 0 {
+			t.Errorf("Expected empty receipts, got %+v", receipts)
+		}
+		time.Sleep(time.Second) // Implement rate limiting
+	})
+
+	t.Run("NewClientError", func(t *testing.T) {
+		_, err := NewClient(&config.EthereumConfig{
+			InfuraAPIKey: "",
+		}) // Missing InfuraAPIKey
 		if err == nil {
-			t.Error("Expected error for empty URL, got nil")
+			t.Fatal("Expected error when creating client without InfuraAPIKey")
+		}
+	})
+
+	t.Run("NewClientError_InvalidConfig", func(t *testing.T) {
+		_, err := NewClient(&config.EthereumConfig{
+			InfuraAPIKey: "invalid-api-key", // Invalid API key
+		})
+		if err == nil {
+			t.Fatal("Expected error when creating client with invalid InfuraAPIKey")
 		}
 	})
 }
