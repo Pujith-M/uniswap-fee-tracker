@@ -87,19 +87,28 @@ Once the application is running, you can access the API in two ways:
 ### Key Components
 
 🔹 **Live Syncer**
-- Monitors new Ethereum blocks in real-time
+- Monitors new Ethereum blocks in real-time using Infura (primary) or Ankr (backup)
 - Filters WETH-USDC pool transactions
-- Handles network interruptions with retry logic
+- Fetches real-time ETH prices from Binance with retry mechanism
+- Handles network interruptions with smart failover
 
 🔹 **Historical Syncer**
-- Batch processes past transactions
+- Batch processes past transactions (10k at a time)
+- Fetches historical ETH prices from Binance
 - Configurable date range processing
 - Optimized for large data sets
+
+🔹 **Price Service**
+- Real-time price updates from Binance
+- Exponential backoff on failures
+- Caches prices briefly to reduce API calls
+- Fallback mechanisms for price fetch failures
 
 🔹 **Transaction Processor**
 - Calculates transaction fees in USDT
 - Uses real-time/historical ETH prices
 - Implements rate limiting for external APIs
+- Handles missing prices gracefully
 
 ## ✨ Features
 
@@ -161,13 +170,18 @@ GET /api/v1/transactions/:hash
 sequenceDiagram
     participant E as Ethereum Node
     participant L as Live Syncer
+    participant B as Binance
     participant P as Processor
     participant D as Database
     
     E->>L: New Block Event
     L->>L: Filter WETH-USDC Txns
-    L->>P: Process Transactions
+    L->>B: Get Current ETH Price
+    B-->>L: Price Data
+    Note over B,L: Retry with backoff if failed
+    L->>P: Process with Price
     P->>D: Store Results
+    Note over L,D: Continue to next block
 ```
 
 #### 2. Historical Sync Process
