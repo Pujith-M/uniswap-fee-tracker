@@ -50,7 +50,7 @@ func main() {
 	// Initialize clients and repository
 	ethClient := etherscan.NewClient(&cfg.EtherscanConfig)
 	binClient := binance.NewClient(&cfg.BinanceConfig)
-	nodeClient, err := ethereum.NewClient(cfg.EthereumConfig.InfuraAPIKey)
+	nodeClient, err := ethereum.NewClient(&cfg.EthereumConfig)
 	if err != nil {
 		log.Fatalf("Failed to connect to Ethereum node: %v", err)
 	}

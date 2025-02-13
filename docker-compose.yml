@@ -11,7 +11,8 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - ETHERSCAN_API_KEY=ZENXIVWGUS7MTH3WWRMAYUK9HIPYZRUNUF
+      - ETHERSCAN_API_KEY=${ETHERSCAN_API_KEY}
+      - INFURA_API_KEY=${INFURA_API_KEY}
       - DB_URI=postgresql://pujithm:postgres@db:5432/uniswap-fee-tracker
     depends_on:
       db:
