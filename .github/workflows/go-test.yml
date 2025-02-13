@@ -12,6 +12,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    env:
+      INFURA_API_KEY: ${{ secrets.INFURA_API_KEY }}  # Use GitHub Secrets for sensitive data
+      ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v2
