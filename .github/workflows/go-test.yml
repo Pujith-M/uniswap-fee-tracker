@@ -3,18 +3,34 @@ name: Go Test
 on:
   push:
     branches:
-      - main  # Change this to your default branch if it's not 'main'
+      - main
   pull_request:
     branches:
-      - main  # Change this to your default branch if it's not 'main'
+      - main
 
 jobs:
   test:
     runs-on: ubuntu-latest
 
     env:
-      INFURA_API_KEY: ${{ secrets.INFURA_API_KEY }}  # Use GitHub Secrets for sensitive data
+      INFURA_API_KEY: ${{ secrets.INFURA_API_KEY }}
       ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/testdb
+
+    services:
+      postgres:
+        image: postgres:latest
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres" 
+          --health-interval 10s 
+          --health-timeout 5s 
+          --health-retries 5
 
     steps:
     - name: Checkout code
@@ -23,7 +39,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v2
       with:
-        go-version: '1.22'  # Specify the Go version you want to use
+        go-version: '1.22'
 
     - name: Run tests
       run: go test ./...
