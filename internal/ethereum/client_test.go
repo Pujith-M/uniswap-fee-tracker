@@ -13,9 +13,9 @@ func TestClientIntegration(t *testing.T) {
 	}
 
 	// Get node URL from environment variable
-	nodeURL := os.Getenv("ETH_NODE_URL")
+	nodeURL := os.Getenv("INFURA_API_KEY")
 	if nodeURL == "" {
-		t.Skip("ETH_NODE_URL not set, skipping integration test")
+		t.Skip("INFURA_API_KEY not set, skipping integration test")
 	}
 
 	// Create client

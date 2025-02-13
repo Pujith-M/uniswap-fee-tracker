@@ -37,6 +37,7 @@ func (s *Service) StartLiveSync(ctx context.Context, startBlock uint64) {
 
 	// Wait for context cancellation
 	<-ctx.Done()
+	log.Printf("Live sync stopped")
 	return
 }
 
@@ -46,25 +47,22 @@ func (s *Service) blockPoller(ctx context.Context, blockChan chan *uint64, lastB
 	defer ticker.Stop()
 
 	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			// Get latest block number
-			latestBlock, err := s.nodeClient.GetLatestBlockNumber(ctx)
-			if err != nil {
-				log.Printf("Error getting latest block: %v", err)
-				continue
-			}
+		log.Printf("Polling for new blocks...")
+		ctx, cancle := context.WithTimeout(context.Background(), time.Second*10)
+		latestBlock, err := s.nodeClient.GetLatestBlockNumber(ctx)
+		cancle()
+		if err != nil {
+			log.Printf("Error getting latest block: %v", err)
+			continue
+		}
 
-			log.Printf("Latest block: %d", latestBlock)
+		log.Printf("Latest block: %d", latestBlock)
 
-			// Process any new blocks
-			if lastBlock < latestBlock {
-				for i := lastBlock + 1; i <= latestBlock; i++ {
-					blockChan <- &i
-					lastBlock = i
-				}
+		// Process any new blocks
+		if lastBlock < latestBlock {
+			for i := lastBlock + 1; i <= latestBlock; i++ {
+				blockChan <- &i
+				lastBlock = i
 			}
 		}
 	}
@@ -75,11 +73,13 @@ func (s *Service) blockProcessor(ctx context.Context, blockChan chan *uint64) {
 	for {
 		select {
 		case <-ctx.Done():
+			log.Printf("blockProcessor: Live sync stopped")
 			return
 		case block := <-blockChan:
 			// Process block transactions
 			if err := s.processBlockTransactions(ctx, block); err != nil {
 				log.Printf("Error processing block %d: %v", block, err)
+				//	TODO: handle block error
 			}
 		}
 	}
@@ -88,12 +88,12 @@ func (s *Service) blockProcessor(ctx context.Context, blockChan chan *uint64) {
 // processBlockTransactions processes transactions in a block
 func (s *Service) processBlockTransactions(ctx context.Context, blockNum *uint64) error {
 	// Get block and receipts
-	block, err := s.nodeClient.GetBlockByNumber(ctx, *blockNum)
+	block, err := s.nodeClient.GetBlockByNumber(context.Background(), *blockNum)
 	if err != nil {
 		return fmt.Errorf("failed to get block %d: %w", *blockNum, err)
 	}
 
-	receipts, err := s.nodeClient.GetBlockReceipts(ctx, *blockNum)
+	receipts, err := s.nodeClient.GetBlockReceipts(context.Background(), *blockNum)
 	if err != nil {
 		return fmt.Errorf("failed to get receipts for block %d: %w", *blockNum, err)
 	}
@@ -110,7 +110,7 @@ func (s *Service) processBlockTransactions(ctx context.Context, blockNum *uint64
 	// Save transactions to database
 	if len(transactions) > 0 {
 		// Get ETH/USDT price for this block
-		kline, err := s.binanceClient.GetPrice(ctx, "ETHUSDT", blockTime)
+		kline, err := s.binanceClient.GetPrice(context.Background(), "ETHUSDT", blockTime)
 		if err != nil {
 			log.Printf("Error getting ETH price for block %d: %v", *blockNum, err)
 			return fmt.Errorf("failed to get ETH price: %w", err)
@@ -124,7 +124,10 @@ func (s *Service) processBlockTransactions(ctx context.Context, blockNum *uint64
 	}
 
 	// Update tracker
-	s.repo.UpdateLastTrackedBlock(*blockNum)
+	if err := s.repo.UpdateLastTrackedBlock(*blockNum); err != nil {
+		log.Printf("Error updating last tracked block %d: %v", *blockNum, err)
+		return fmt.Errorf("failed to update last tracked block: %w", err)
+	}
 
 	return nil
 }
@@ -142,23 +145,23 @@ func (s *Service) filterTransaction(block *types.Block, receiptMap map[string]*t
 		}
 
 		// Check for Uniswap V3 WETH-USDC swap events
-		isSwap := false
+		is_WETH_USDC_PoolTx := false
 		for _, log := range receipt.Logs {
 			// Check if log is from WETH-USDC pool and is a swap event
-			if IsWethUsdcPool(log.Address.Hex()) && len(log.Topics) > 0 && IsSwapEvent(log.Topics[0].Hex()) {
-				isSwap = true
+			if IsWethUsdcPool(log.Address.Hex()) {
+				is_WETH_USDC_PoolTx = true
 				break
 			}
 		}
 
 		// Skip if not a swap
-		if !isSwap {
+		if !is_WETH_USDC_PoolTx {
 			continue
 		}
 
-		// Calculate fee in ETH
+		// Calculate effective gas price (handles both legacy and EIP-1559 transactions)
 		gasUsed := big.NewInt(int64(receipt.GasUsed))
-		gasPrice := tx.GasPrice()
+		effectiveGasPrice := receipt.EffectiveGasPrice
 
 		// Create transaction model
 		txModel := &Transaction{
@@ -166,7 +169,7 @@ func (s *Service) filterTransaction(block *types.Block, receiptMap map[string]*t
 			BlockNumber: *blockNum,
 			Timestamp:   blockTime,
 			GasUsed:     NewBigInt(gasUsed),
-			GasPrice:    NewBigInt(gasPrice),
+			GasPrice:    NewBigInt(effectiveGasPrice),
 			Status:      StatusPendingPrice,
 		}
 

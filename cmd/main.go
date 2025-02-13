@@ -50,7 +50,7 @@ func main() {
 	// Initialize clients and repository
 	ethClient := etherscan.NewClient(&cfg.EtherscanConfig)
 	binClient := binance.NewClient(&cfg.BinanceConfig)
-	nodeClient, err := ethereum.NewClient(cfg.EthereumConfig.NodeURL)
+	nodeClient, err := ethereum.NewClient(cfg.EthereumConfig.InfuraAPIKey)
 	if err != nil {
 		log.Fatalf("Failed to connect to Ethereum node: %v", err)
 	}
@@ -63,13 +63,9 @@ func main() {
 
 	service := syncer.NewService(cfg, ethClient, binClient, nodeClient, repo)
 
-	// Create context that can be cancelled
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	// Start historical sync from Uniswap v3 deployment block
 	log.Printf("Starting historical sync from block %d", cfg.UniswapStartBlock)
-	if err := service.StartSync(ctx, cfg.UniswapStartBlock); err != nil {
+	if err := service.StartSync(context.Background(), cfg.UniswapStartBlock); err != nil {
 		log.Fatalf("Failed to start historical sync: %v", err)
 	}
 
@@ -91,5 +87,4 @@ func main() {
 
 	<-sigChan
 	log.Println("Shutting down gracefully...")
-	cancel()
 }

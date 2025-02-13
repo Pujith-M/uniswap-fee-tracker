@@ -37,7 +37,8 @@ type BinanceConfig struct {
 }
 
 type EthereumConfig struct {
-	NodeURL string
+	InfuraAPIKey string
+	HTTPClientConfig
 }
 
 func LoadConfig() (*Config, error) {
@@ -47,9 +48,9 @@ func LoadConfig() (*Config, error) {
 		return nil, fmt.Errorf("ETHERSCAN_API_KEY environment variable is required")
 	}
 
-	ethNodeURL := os.Getenv("ETH_NODE_URL")
-	if ethNodeURL == "" {
-		return nil, fmt.Errorf("ETH_NODE_URL environment variable is required")
+	infuraAPIKey := os.Getenv("INFURA_API_KEY")
+	if infuraAPIKey == "" {
+		return nil, fmt.Errorf("INFURA_API_KEY environment variable is required")
 	}
 
 	dbURI := os.Getenv("DB_URI")
@@ -63,7 +64,15 @@ func LoadConfig() (*Config, error) {
 		UniswapV3Pool:     "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // Uniswap V3 USDC/WETH pool
 		UniswapStartBlock: 12376729,                                     // Uniswap V3 deployment block
 		EthereumConfig: EthereumConfig{
-			NodeURL: ethNodeURL,
+			InfuraAPIKey: infuraAPIKey,
+			HTTPClientConfig: HTTPClientConfig{
+				BaseURL:    "https://mainnet.infura.io/v3",
+				RetryCount: 3,
+				RetryWait:  time.Second,
+				RateLimit:  10.0, // Example limit: 10 requests per second
+				RateBurst:  5,    // Allow burst of 5 requests
+				Timeout:    10 * time.Second,
+			},
 		},
 		EtherscanConfig: EtherscanConfig{
 			HTTPClientConfig: HTTPClientConfig{

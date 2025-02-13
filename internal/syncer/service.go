@@ -68,12 +68,13 @@ func (s *Service) StartSync(ctx context.Context, indexedStartBlock uint64) error
 		}
 	}
 
-	// Start live sync from the latest block
+	// Start live sync from the latest block with a new context
 	go func() {
+		// Create a new background context for live sync
+		liveCtx := context.Background()
 		// Start live sync from latest block
 		log.Printf("Starting live sync from block %d", latestBlock)
-		s.StartLiveSync(ctx, latestBlock)
+		s.StartLiveSync(liveCtx, latestBlock)
 	}()
-
 	return nil
 }

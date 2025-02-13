@@ -3,131 +3,139 @@ package ethereum
 import (
 	"context"
 	"fmt"
+	"log"
 	"math/big"
-	"sync"
 	"time"
+	"uniswap-fee-tracker/internal/config"
 
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"golang.org/x/time/rate"
 )
 
 // Client represents an Ethereum node client
 type Client struct {
-	client     *ethclient.Client
-	httpURL    string
-	retryDelay time.Duration
-	mu         sync.RWMutex
+	cfg     *config.EthereumConfig
+	client  *ethclient.Client
+	httpURL string
+	limiter *rate.Limiter
 }
 
 // NewClient creates a new Ethereum client
-func NewClient(infuraApiKey string) (*Client, error) {
-	httpURL := fmt.Sprintf("https://mainnet.infura.io/v3/%s", infuraApiKey)
-
-	// Create HTTP client
-	client, err := ethclient.Dial(httpURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to HTTP endpoint: %w", err)
+func NewClient(cfg *config.EthereumConfig) (*Client, error) {
+	if cfg.InfuraAPIKey == "" {
+		return nil, fmt.Errorf("infura API key cannot be empty")
 	}
 
+	httpURL := fmt.Sprintf("%s/%s", cfg.BaseURL, cfg.InfuraAPIKey)
+	log.Printf("Initializing Ethereum client with endpoint: %s", httpURL)
+
+	client, err := ethclient.Dial(httpURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to Ethereum node: %w", err)
+	}
+
+	log.Println("Successfully connected to Ethereum node")
+
+	// Create rate limiter using configuration
+	limiter := rate.NewLimiter(rate.Limit(cfg.RateLimit), cfg.RateBurst)
+
 	return &Client{
-		client:     client,
-		httpURL:    httpURL,
-		retryDelay: 5 * time.Second,
+		cfg:     cfg,
+		client:  client,
+		httpURL: httpURL,
+		limiter: limiter,
 	}, nil
+}
+
+// retry executes a function with exponential backoff retry logic
+func retry(attempts int, delay time.Duration, fn func() error) error {
+	var err error
+	for i := 0; i < attempts; i++ {
+		err = fn()
+		if err == nil {
+			return nil
+		}
+		log.Printf("Retry %d/%d failed: %v", i+1, attempts, err)
+		time.Sleep(delay * time.Duration(1<<uint(i)))
+	}
+	return err
 }
 
 // GetLatestBlockNumber returns the latest block number from the Ethereum network
 func (c *Client) GetLatestBlockNumber(ctx context.Context) (uint64, error) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	blockNumber, err := c.client.BlockNumber(ctx)
-	if err != nil {
-		// Try to reconnect if the connection is lost
-		if err := c.reconnect(); err != nil {
-			return 0, fmt.Errorf("failed to get latest block number and reconnect: %w", err)
-		}
-		// Retry once after reconnecting
-		blockNumber, err = c.client.BlockNumber(ctx)
-		if err != nil {
-			return 0, fmt.Errorf("failed to get latest block number after reconnect: %w", err)
-		}
+	// Wait for rate limiter
+	if err := c.limiter.Wait(ctx); err != nil {
+		return 0, fmt.Errorf("rate limiter wait: %w", err)
 	}
 
+	var blockNumber uint64
+	err := retry(c.cfg.RetryCount, time.Second, func() error {
+		withTimeout, cancel := context.WithTimeout(ctx, c.cfg.Timeout)
+		defer cancel()
+		var err error
+		blockNumber, err = c.client.BlockNumber(withTimeout)
+		return err
+	})
+
+	if err != nil {
+		return 0, fmt.Errorf("failed to get latest block number: %w", err)
+	}
+
+	log.Printf("Successfully retrieved latest block number: %d", blockNumber)
 	return blockNumber, nil
-}
-
-// reconnect attempts to reconnect to the Ethereum node
-func (c *Client) reconnect() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// Close existing connection
-	if c.client != nil {
-		c.client.Close()
-	}
-
-	// Try to reconnect
-	client, err := ethclient.Dial(c.httpURL)
-	if err != nil {
-		return fmt.Errorf("failed to reconnect to HTTP endpoint: %w", err)
-	}
-
-	c.client = client
-	return nil
-}
-
-// Close closes the client connection
-func (c *Client) Close() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.client != nil {
-		c.client.Close()
-	}
 }
 
 // GetBlockByNumber retrieves a block by its number
 func (c *Client) GetBlockByNumber(ctx context.Context, number uint64) (*types.Block, error) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	block, err := c.client.BlockByNumber(ctx, big.NewInt(int64(number)))
-	if err != nil {
-		// Try to reconnect if the connection is lost
-		if err := c.reconnect(); err != nil {
-			return nil, fmt.Errorf("failed to get block and reconnect: %w", err)
-		}
-		// Retry once after reconnecting
-		block, err = c.client.BlockByNumber(ctx, big.NewInt(int64(number)))
-		if err != nil {
-			return nil, fmt.Errorf("failed to get block after reconnect: %w", err)
-		}
+	// Wait for rate limiter
+	if err := c.limiter.Wait(ctx); err != nil {
+		return nil, fmt.Errorf("rate limiter wait: %w", err)
 	}
 
+	var block *types.Block
+	err := retry(c.cfg.RetryCount, time.Second, func() error {
+		withTimeout, cancel := context.WithTimeout(ctx, c.cfg.Timeout)
+		defer cancel()
+		var err error
+		block, err = c.client.BlockByNumber(withTimeout, big.NewInt(int64(number)))
+		return err
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get block %d: %w", number, err)
+	}
+
+	log.Printf("Successfully retrieved block %d with %d transactions", number, len(block.Transactions()))
 	return block, nil
 }
 
 // GetBlockReceipts retrieves all transaction receipts for a block using eth_getBlockReceipts
 func (c *Client) GetBlockReceipts(ctx context.Context, blockNumber uint64) ([]*types.Receipt, error) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	var receipts []*types.Receipt
-
-	// Call eth_getBlockReceipts RPC method
-	err := c.client.Client().CallContext(ctx, &receipts, "eth_getBlockReceipts", fmt.Sprintf("0x%x", blockNumber))
-	if err != nil {
-		// Try to reconnect if the connection is lost
-		if err := c.reconnect(); err != nil {
-			return nil, fmt.Errorf("failed to get block receipts and reconnect: %w", err)
-		}
-		// Retry once after reconnecting
-		err = c.client.Client().CallContext(ctx, &receipts, "eth_getBlockReceipts", fmt.Sprintf("0x%x", blockNumber))
-		if err != nil {
-			return nil, fmt.Errorf("failed to get block receipts after reconnect: %w", err)
-		}
+	// Wait for rate limiter
+	if err := c.limiter.Wait(ctx); err != nil {
+		return nil, fmt.Errorf("rate limiter wait: %w", err)
 	}
 
+	var receipts []*types.Receipt
+	err := retry(c.cfg.RetryCount, time.Second, func() error {
+		withTimeout, cancel := context.WithTimeout(ctx, c.cfg.Timeout)
+		defer cancel()
+		blockHex := fmt.Sprintf("0x%x", blockNumber)
+		return c.client.Client().CallContext(withTimeout, &receipts, "eth_getBlockReceipts", blockHex)
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get receipts for block %d: %w", blockNumber, err)
+	}
+
+	log.Printf("Successfully retrieved %d receipts for block %d", len(receipts), blockNumber)
 	return receipts, nil
+}
+
+// Close closes the client connection
+func (c *Client) Close() {
+	if c.client != nil {
+		c.client.Close()
+	}
 }
