@@ -82,7 +82,6 @@ func (c *Client) GetLatestBlockNumber(ctx context.Context) (uint64, error) {
 		return 0, fmt.Errorf("failed to get latest block number: %w", err)
 	}
 
-	log.Printf("Successfully retrieved latest block number: %d", blockNumber)
 	return blockNumber, nil
 }
 

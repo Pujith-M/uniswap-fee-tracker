@@ -19,7 +19,7 @@ func (s *Service) processBatch(ctx context.Context, txs [][]*Transaction, batchS
 
 		var wg sync.WaitGroup
 		currentBatch := txs[i:end]
-		log.Printf("Starting price fetch batch %d to %d out of %d total transactions", i+1, end, total)
+		log.Printf("🔄 Fetching ETH prices [Batch %d-%d] | Progress: %.1f%% | Total Txns: %d", i+1, end, float64(i+1)/float64(total)*100, total)
 
 		for _, tx := range currentBatch {
 			wg.Add(1)
@@ -43,7 +43,7 @@ func (s *Service) processBatch(ctx context.Context, txs [][]*Transaction, batchS
 
 		// Wait for current batch to finish before processing next batch
 		wg.Wait()
-		log.Printf("Completed price fetch batch %d to %d out of %d total transactions", i+1, end, total)
+		log.Printf("✅ Completed ETH price fetch [Batch %d-%d] | Progress: %.1f%% | Total Txns: %d", i+1, end, float64(end)/float64(total)*100, total)
 	}
 	results := make([]*Transaction, 0)
 	for _, tx := range txs {

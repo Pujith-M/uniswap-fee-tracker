@@ -47,7 +47,6 @@ func (s *Service) blockPoller(ctx context.Context, blockChan chan *uint64, lastB
 	defer ticker.Stop()
 
 	for {
-		log.Printf("Polling for new blocks...")
 		ctx, cancle := context.WithTimeout(context.Background(), time.Second*10)
 		latestBlock, err := s.nodeClient.GetLatestBlockNumber(ctx)
 		cancle()
@@ -55,8 +54,6 @@ func (s *Service) blockPoller(ctx context.Context, blockChan chan *uint64, lastB
 			log.Printf("Error getting latest block: %v", err)
 			continue
 		}
-
-		log.Printf("Latest block: %d", latestBlock)
 
 		// Process any new blocks
 		if lastBlock < latestBlock {
@@ -87,6 +84,7 @@ func (s *Service) blockProcessor(ctx context.Context, blockChan chan *uint64) {
 
 // processBlockTransactions processes transactions in a block
 func (s *Service) processBlockTransactions(ctx context.Context, blockNum *uint64) error {
+	log.Printf("Processing live block %d", *blockNum)
 	// Get block and receipts
 	block, err := s.nodeClient.GetBlockByNumber(context.Background(), *blockNum)
 	if err != nil {
@@ -128,7 +126,7 @@ func (s *Service) processBlockTransactions(ctx context.Context, blockNum *uint64
 		log.Printf("Error updating last tracked block %d: %v", *blockNum, err)
 		return fmt.Errorf("failed to update last tracked block: %w", err)
 	}
-
+	log.Printf("✅Processing live block completed %d", *blockNum)
 	return nil
 }
 
