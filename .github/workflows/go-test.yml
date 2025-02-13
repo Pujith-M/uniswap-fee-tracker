@@ -15,7 +15,7 @@ jobs:
     env:
       INFURA_API_KEY: ${{ secrets.INFURA_API_KEY }}
       ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/testdb
+      DB_URI: postgres://postgres:postgres@localhost:5432/testdb
 
     services:
       postgres:
