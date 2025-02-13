@@ -4,12 +4,16 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"time"
 	"uniswap-fee-tracker/internal/etherscan"
 )
 
 // StartHistoricalSync starts a historical sync from startBlock to latestBlock
 func (s *Service) StartHistoricalSync(ctx context.Context, startBlock, latestBlock uint64) error {
+	if os.Getenv("DISABLE_HISTORICAL_SYNC") == "true" {
+		return nil
+	}
 	// Create sync progress record
 	progress := &SyncProgress{
 		StartBlock:            startBlock,
@@ -64,7 +68,7 @@ func (s *Service) runHistoricalSync(ctx context.Context, progress *SyncProgress)
 		}
 
 		// Get transactions for current batch
-		transfers, err := s.ethClient.GetTokenTransfers(ctx, s.config.UniswapV3Pool, currentBlock, progress.EndBlock)
+		transfers, err := s.etherScanClient.GetTokenTransfers(ctx, s.config.UniswapV3Pool, currentBlock, progress.EndBlock)
 		if err != nil {
 			log.Printf("Failed to get token transfers for block %d: %v", currentBlock, err)
 			time.Sleep(10 * time.Second)
@@ -75,12 +79,12 @@ func (s *Service) runHistoricalSync(ctx context.Context, progress *SyncProgress)
 			break
 		}
 		lastBlockInBatch := transfers[len(transfers)-1].GetBlockNumber()
-		isFinalIteration := lastBlockInBatch == progress.EndBlock
+		isFinalIteration := lastBlockInBatch == progress.EndBlock || lastBlockInBatch == currentBlock
 		txBatch := s.filterAndGroupTransactions(transfers, isFinalIteration, lastBlockInBatch)
 
 		// Log batch processing
 		log.Printf("Fetching historic price for batch of %d transactions from block %d to %d",
-			len(txBatch), currentBlock, lastBlockInBatch-1)
+			len(txBatch), currentBlock, lastBlockInBatch)
 
 		// Fetch prices for batch transactions
 		txsWithPrice := s.processBatch(ctx, txBatch, s.config.PriceFetchBatchSize)
@@ -93,11 +97,14 @@ func (s *Service) runHistoricalSync(ctx context.Context, progress *SyncProgress)
 			return
 		}
 
-		log.Printf("Successfully processed batch. Total transactions so far: %d",
+		log.Printf("Successfully fetched batch. Total transactions so far: %d",
 			progress.TransactionsProcessed+uint64(len(txsWithPrice)))
 
 		// Update progress
-		progress.LastProcessedBlock = lastBlockInBatch - 1
+		progress.LastProcessedBlock = lastBlockInBatch
+		if !isFinalIteration {
+			progress.LastProcessedBlock = lastBlockInBatch - 1
+		}
 		progress.TransactionsProcessed += uint64(len(txsWithPrice))
 
 		if err := s.repo.UpdateSyncProgress(progress); err != nil {

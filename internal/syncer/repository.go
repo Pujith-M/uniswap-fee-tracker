@@ -2,6 +2,7 @@ package syncer
 
 import (
 	"errors"
+
 	"gorm.io/gorm"
 )
 
@@ -44,13 +45,7 @@ func (r *repository) SaveTransactions(txs []*Transaction) error {
 func (r *repository) GetTransaction(txHash string) (*Transaction, error) {
 	var tx Transaction
 	err := r.db.Where("tx_hash = ?", txHash).First(&tx).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return &tx, nil
+	return &tx, err
 }
 
 func (r *repository) UpdateTransactionStatus(txHash string, status TransactionStatus) error {

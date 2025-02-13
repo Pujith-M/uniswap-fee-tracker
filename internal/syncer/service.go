@@ -14,20 +14,20 @@ import (
 )
 
 type Service struct {
-	config     *config.Config
-	ethClient  etherscan.Client
-	binClient  binance.Client
-	repo       Repository
-	nodeClient *ethereum.Client
+	config          *config.Config
+	etherScanClient etherscan.Client
+	binanceClient   binance.Client
+	repo            Repository
+	nodeClient      *ethereum.Client
 }
 
 func NewService(config *config.Config, ethClient etherscan.Client, binClient binance.Client, nodeClient *ethereum.Client, repo Repository) *Service {
 	return &Service{
-		config:     config,
-		ethClient:  ethClient,
-		binClient:  binClient,
-		nodeClient: nodeClient,
-		repo:       repo,
+		config:          config,
+		etherScanClient: ethClient,
+		binanceClient:   binClient,
+		nodeClient:      nodeClient,
+		repo:            repo,
 	}
 }
 
@@ -49,26 +49,31 @@ func (s *Service) StartSync(ctx context.Context, indexedStartBlock uint64) error
 	}
 
 	// Get latest block from node
-	latestBlockNumber, err := s.nodeClient.GetLatestBlockNumber(ctx)
+	latestBlock, err := s.nodeClient.GetLatestBlockNumber(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get latest block number: %w", err)
+		return fmt.Errorf("failed to get latest block: %w", err)
 	}
 
 	// Validate block numbers
-	if lastTrackedBlock > latestBlockNumber {
+	if lastTrackedBlock > latestBlock {
 		return fmt.Errorf("last tracked block (%d) is greater than latest block (%d)",
-			lastTrackedBlock, latestBlockNumber)
+			lastTrackedBlock, latestBlock)
 	}
 
-	// Start historical sync if we're behind
-	if lastTrackedBlock < latestBlockNumber {
-		log.Printf("Starting historical sync from block %d to %d", lastTrackedBlock, latestBlockNumber)
-		if err := s.StartHistoricalSync(ctx, lastTrackedBlock, latestBlockNumber); err != nil {
+	// Start historical sync if needed
+	if lastTrackedBlock < latestBlock {
+		log.Printf("Starting historical sync from block %d to %d", lastTrackedBlock, latestBlock)
+		if err := s.StartHistoricalSync(ctx, lastTrackedBlock, latestBlock); err != nil {
 			return fmt.Errorf("failed to start historical sync: %w", err)
 		}
 	}
 
-	// Start live sync from latest block
-	log.Printf("Starting live sync from block %d", latestBlockNumber)
-	return s.StartLiveSync(ctx, latestBlockNumber)
+	// Start live sync from the latest block
+	go func() {
+		// Start live sync from latest block
+		log.Printf("Starting live sync from block %d", latestBlock)
+		s.StartLiveSync(ctx, latestBlock)
+	}()
+
+	return nil
 }

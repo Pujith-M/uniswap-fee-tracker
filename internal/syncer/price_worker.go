@@ -27,7 +27,7 @@ func (s *Service) processBatch(ctx context.Context, txs [][]*Transaction, batchS
 				defer wg.Done()
 
 				// Fetch ETH/USDT price for the transaction
-				kline, err := s.binClient.GetPrice(ctx, "ETHUSDT", txs[0].Timestamp)
+				kline, err := s.binanceClient.GetPrice(ctx, "ETHUSDT", txs[0].Timestamp)
 				if err != nil {
 					log.Printf("failed to get ETH price: %v", err)
 					for _, tx := range txs {

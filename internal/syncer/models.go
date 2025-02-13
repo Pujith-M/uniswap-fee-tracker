@@ -47,10 +47,9 @@ func (tx *Transaction) UpdatePrices(ethPrice *big.Float) {
 	feeWei := new(big.Int).Mul(tx.GasUsed.Int, tx.GasPrice.Int)
 
 	// Convert Wei to ETH (divide by 10^18)
-	denominator := new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil)
 	tx.FeeETH = NewBigFloat(new(big.Float).Quo(
 		new(big.Float).SetInt(feeWei),
-		new(big.Float).SetInt(denominator),
+		new(big.Float).SetInt(big.NewInt(1e18)),
 	))
 	// Store ETH price
 	tx.ETHPrice = NewBigFloat(new(big.Float).Set(ethPrice))
